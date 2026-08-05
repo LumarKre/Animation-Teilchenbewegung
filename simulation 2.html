@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Teilchenbewegung: Helium, Eisen, Quecksilber und Wasser</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#111c31; --panel2:#17243c; --text:#ecf4ff; --muted:#9fb4d1;
+    --accent:#55c7ff; --accent2:#f7c948; --solid:#7dd3fc; --liquid:#60a5fa; --gas:#f97316;
+    --ok:#7ee787; --warn:#ffd166; --line:rgba(255,255,255,.12);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    color:var(--text); background:radial-gradient(circle at 20% 0%, #1c3157 0, var(--bg) 44%, #070b12 100%);
+    min-height:100vh;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:18px 14px 28px;}
+  header{display:flex; gap:16px; align-items:flex-start; justify-content:space-between; margin-bottom:12px;}
+  h1{font-size:clamp(1.35rem,2vw,2rem); margin:.15rem 0 .25rem; letter-spacing:.2px;}
+  .subtitle{color:var(--muted); line-height:1.35; max-width:780px; font-size:.98rem;}
+  .badge{background:rgba(85,199,255,.13); color:#bdeeff; border:1px solid rgba(85,199,255,.35); padding:8px 10px; border-radius:999px; white-space:nowrap; font-size:.9rem;}
+  .main{display:grid; grid-template-columns:minmax(0, 1fr) 330px; gap:14px; align-items:start;}
+  .card{background:linear-gradient(180deg, rgba(23,36,60,.94), rgba(13,22,38,.94)); border:1px solid var(--line); border-radius:18px; box-shadow:0 16px 50px rgba(0,0,0,.34); overflow:hidden;}
+  .canvasBox{position:relative; padding:10px;}
+  canvas#sim{width:100%; height:560px; display:block; background:linear-gradient(180deg,#0b1528,#0a1020); border-radius:13px; border:1px solid rgba(255,255,255,.09);}
+  .overlay{position:absolute; top:22px; left:24px; display:flex; gap:8px; flex-wrap:wrap; pointer-events:none;}
+  .pill{border:1px solid rgba(255,255,255,.16); background:rgba(4,10,20,.56); backdrop-filter:blur(7px); border-radius:999px; padding:6px 10px; color:#eaf6ff; font-weight:650; font-size:.9rem;}
+  .controls{padding:12px 14px 15px; display:grid; gap:12px; border-top:1px solid var(--line);}
+  .controlRow{display:grid; grid-template-columns:150px minmax(0,1fr) 122px; gap:12px; align-items:center;}
+  label{font-weight:700; color:#dcecff;}
+  .value{font-variant-numeric:tabular-nums; text-align:right; color:#dbeafe; font-weight:700;}
+  input[type=range]{width:100%; accent-color:var(--accent); cursor:pointer;}
+  input[type=range]:disabled{opacity:.42; cursor:not-allowed;}
+  select{width:100%; padding:9px 10px; border-radius:11px; border:1px solid rgba(255,255,255,.16); color:var(--text); background:#0e1930; outline:none; font-weight:650;}
+  .side{padding:14px; display:grid; gap:12px;}
+  .statGrid{display:grid; grid-template-columns:1fr; gap:9px;}
+  .stat{background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.09); border-radius:14px; padding:10px 11px;}
+  .stat .k{display:block; color:var(--muted); font-size:.82rem; margin-bottom:3px;}
+  .stat .v{font-size:1.04rem; font-weight:800; font-variant-numeric:tabular-nums;}
+  .stateSolid{color:#8be6ff}.stateLiquid{color:#7db3ff}.stateGas{color:#ffb36b}.stateZero{color:#d8f3ff}
+  #hist{width:100%; height:190px; display:block; border-radius:14px; background:#08101f; border:1px solid rgba(255,255,255,.09);}
+  .legend{display:grid; gap:7px; color:#b7c8df; font-size:.9rem; line-height:1.28;}
+  .legend b{color:#fff}.dot{display:inline-block;width:9px;height:9px;border-radius:99px;margin-right:7px;vertical-align:1px}.d1{background:var(--solid)}.d2{background:var(--liquid)}.d3{background:var(--gas)}
+  .note{font-size:.84rem; color:#9fb4d1; line-height:1.35; border-top:1px solid var(--line); padding-top:10px;}
+  .waterHint{display:none; background:rgba(96,165,250,.12); border:1px solid rgba(96,165,250,.28); color:#dcecff; padding:10px 11px; border-radius:14px; font-size:.88rem; line-height:1.35;}
+  .waterHint.show{display:block;}
+  @media (max-width:900px){.main{grid-template-columns:1fr}.side{grid-row:auto} canvas#sim{height:500px}.controlRow{grid-template-columns:1fr}.value{text-align:left} header{display:block}.badge{display:inline-block;margin-top:8px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Teilchenbewegung: Helium, Eisen, Quecksilber und Wasser</h1>
+      <div class="subtitle">Temperatur erhöht die thermische Energie; über <b>v = √(2E/m)</b> steigt die Geschwindigkeit. Größere Masse verlangsamt sichtbar die Bewegung und vergrößert die Teilchendarstellung.</div>
+    </div>
+    <div class="badge">0 K: perfektes Gitter, keine Bewegung</div>
+  </header>
+
+  <div class="main">
+    <section class="card">
+      <div class="canvasBox">
+        <canvas id="sim" width="900" height="560" aria-label="Teilchensimulation"></canvas>
+        <div class="overlay">
+          <span class="pill" id="phasePill">Aggregatzustand</span>
+          <span class="pill" id="transitionPill">Übergänge</span>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="controlRow">
+          <label for="temp">Temperatur</label>
+          <input id="temp" type="range" min="0" max="2000" step="1" value="300" />
+          <div class="value" id="tempVal">Temperatur: 300 K (26,85 °C)</div>
+        </div>
+        <div class="controlRow">
+          <label for="mass">Teilchenmasse</label>
+          <input id="mass" type="range" min="2" max="220" step="1" value="32" />
+          <div class="value" id="massVal">32 u</div>
+        </div>
+        <div class="controlRow">
+          <label for="substance">Stoffauswahl</label>
+          <select id="substance">
+            <option value="model">Modellstoff frei einstellbar</option>
+            <option value="helium">Helium (He)</option>
+            <option value="iron">Eisen (Fe)</option>
+            <option value="mercury">Quecksilber (Hg)</option>
+            <option value="water">Wasser (H₂O)</option>
+          </select>
+          <div class="value" id="substanceVal">Masse einstellbar</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="card side">
+      <div class="statGrid">
+        <div class="stat"><span class="k">Temperatur</span><span class="v" id="statTemp">300 K (26,85 °C)</span></div>
+        <div class="stat"><span class="k">Aggregatzustand</span><span class="v" id="statState">–</span></div>
+        <div class="stat"><span class="k">mittlere Geschwindigkeit</span><span class="v" id="statSpeed">–</span></div>
+        <div class="stat"><span class="k">relative thermische Energie</span><span class="v" id="statEnergy">–</span></div>
+        <div class="stat"><span class="k">Schmelz- / Siedepunkt</span><span class="v" id="statPoints">–</span></div>
+      </div>
+      <canvas id="hist" width="310" height="190" aria-label="Histogramm der Geschwindigkeitsverteilung"></canvas>
+      <div class="waterHint" id="waterHint"><b>Besonderheit Wasser:</b> Im Eis erzwingen Wasserstoffbrücken eine offene Kristallstruktur mit größeren Abständen. Beim Schmelzen wird die Packung dichter – flüssiges Wasser ist deshalb dichter als Eis.</div>
+      <div class="legend">
+        <div><span class="dot d1"></span><b>Feststoff:</b> Teilchen schwingen nur um feste Gitterplätze.</div>
+        <div><span class="dot d2"></span><b>Flüssigkeit:</b> dichter Tropfen; Teilchen gleiten aneinander vorbei und bleiben zusammen.</div>
+        <div><span class="dot d3"></span><b>Gas:</b> einzelne freie Teilchen mit großen Wegen; der benötigte Raum wächst mit der Temperatur.</div>
+      </div>
+      <div class="note">Die reale Physik wird didaktisch skaliert: Geschwindigkeitsspuren und Wege sind vergrößert, damit Unterschiede zwischen z. B. 300 K, 600 K, 1000 K und 2000 K unmittelbar sichtbar werden. Zustandsübergänge berücksichtigen Temperatur, Masse und modellierte Anziehungskräfte.</div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('sim');
+  const ctx = canvas.getContext('2d');
+  const hist = document.getElementById('hist');
+  const hctx = hist.getContext('2d');
+  const tempEl = document.getElementById('temp');
+  const massEl = document.getElementById('mass');
+  const substanceEl = document.getElementById('substance');
+  const ids = Object.fromEntries(['tempVal','massVal','substanceVal','statTemp','statState','statSpeed','statEnergy','statPoints','phasePill','transitionPill','waterHint'].map(id=>[id,document.getElementById(id)]));
+
+  const N = 49;
+  const substances = {
+    model:    {name:'Modellstoff', formula:'', mass:null, melt:null, boil:null, attraction:1.0, color:'#6bdcff'},
+    helium:   {name:'Helium', formula:'He', mass:4.0026, melt:0.95, boil:4.20, attraction:0.06, color:'#d8fbff'},
+    iron:     {name:'Eisen', formula:'Fe', mass:55.845, melt:1812.0, boil:3343.0, attraction:4.4, color:'#d5d0c8'},
+    mercury:  {name:'Quecksilber', formula:'Hg', mass:200.59, melt:234.32, boil:630.2, attraction:2.2, color:'#c7d3de'},
+    water:    {name:'Wasser', formula:'H₂O', mass:18.015, melt:273.15, boil:373.15, attraction:2.85, color:'#67b7ff', water:true}
+  };
+
+  let particles = [];
+  let lastT = performance.now();
+  let simTime = 0;
+  let previousPhase = 'init';
+  let scatterSeed = 1;
+
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const rand = (a=0,b=1)=>a+Math.random()*(b-a);
+  const fmt = (n,d=0)=>n.toLocaleString('de-DE',{minimumFractionDigits:d, maximumFractionDigits:d});
+  const celsius = K => K - 273.15;
+
+  // Gamma-ähnlicher Zufallsfaktor: viele mittlere, wenige sehr schnelle Teilchen.
+  function speedFactor(){
+    const u1 = Math.max(1e-6, Math.random()), u2 = Math.max(1e-6, Math.random());
+    const rayleigh = Math.sqrt(-2*Math.log(u1));
+    return clamp(0.38 + 0.42*rayleigh + 0.16*Math.random() + 0.18*Math.sqrt(-Math.log(u2)), 0.28, 2.45);
+  }
+
+  function currentSubstance(){ return substances[substanceEl.value]; }
+  function currentMass(){ return currentSubstance().mass || Number(massEl.value); }
+  function modelPoints(mass){
+    // Freier Modellstoff: schwerere Teilchen + stärkere Anziehung => höhere Übergangstemperaturen.
+    const attraction = 0.82 + Math.pow(mass/55, 0.52);
+    const melt = clamp(55 + 8.2*mass + 22*attraction, 25, 1350);
+    const boil = clamp(melt + 150 + 10.5*mass + 75*attraction, melt + 35, 1990);
+    return {melt, boil, attraction};
+  }
+  function phaseInfo(K, s, mass){
+    const pts = s.melt ? {melt:s.melt, boil:s.boil, attraction:s.attraction} : modelPoints(mass);
+    if (K === 0) return {...pts, phase:'zero', solidAmt:1, liquidAmt:0, gasAmt:0, phaseLabel:'0 K: perfektes Kristallgitter'};
+    // Nicht nur harte Grenzen: eine kleine Übergangszone hängt von Anziehung ab. Starke Kräfte => schmalere, stabilere Übergangszone.
+    const wM = clamp(10 + pts.melt*0.035/(0.45+pts.attraction), 2, 55);
+    const wB = clamp(12 + pts.boil*0.04/(0.45+pts.attraction), 2, 80);
+    const meltBlend = smoothstep(pts.melt - wM, pts.melt + wM, K);
+    const boilBlend = smoothstep(pts.boil - wB, pts.boil + wB, K);
+    const solidAmt = 1 - meltBlend;
+    const liquidAmt = meltBlend * (1 - boilBlend);
+    const gasAmt = boilBlend;
+    let phase = 'solid', phaseLabel = 'Feststoff';
+    if (gasAmt > .58) { phase='gas'; phaseLabel='Gas'; }
+    else if (liquidAmt > .50) { phase='liquid'; phaseLabel='Flüssigkeit'; }
+    else if (meltBlend > .05 && meltBlend < .95) { phase='melting'; phaseLabel='Schmelzbereich'; }
+    else if (boilBlend > .05 && boilBlend < .95) { phase='boiling'; phaseLabel='Siedebereich'; }
+    return {...pts, phase, solidAmt, liquidAmt, gasAmt, phaseLabel};
+  }
+  function smoothstep(edge0, edge1, x){
+    const t = clamp((x-edge0)/(edge1-edge0),0,1); return t*t*(3-2*t);
+  }
+
+  function resizeCanvas(){
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width*dpr); canvas.height = Math.round(rect.height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function latticePositions(phase='solid'){
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    const isWater = substanceEl.value === 'water';
+    const cols = 7, rows = Math.ceil(N/cols);
+    // Weniger Teilchen und kompaktere Gitterfläche: Der Festkörper hat ein klares,
+    // aber nicht zu großes Volumen, damit der kleine Unterschied zur Flüssigkeit sichtbar wird.
+    const base = Math.min(W,H) * 0.072;
+    let spacingX = base, spacingY = base;
+    if (isWater && phase === 'ice') {
+      // Eis: offene Kristallstruktur, sichtbar größeres Volumen als flüssiges Wasser.
+      spacingX = base * 1.13;
+      spacingY = base * 1.13;
+    }
+    const totalW = spacingX*(cols-1), totalH = spacingY*(rows-1);
+    const startX = W/2-totalW/2, startY = H/2-totalH/2 + H*.03;
+    const arr = [];
+    for(let i=0;i<N;i++){
+      const r = Math.floor(i/cols), c = i%cols;
+      let x = startX + c*spacingX;
+      let y = startY + r*spacingY;
+      if (isWater && phase === 'ice') {
+        // offene, hexagonal angedeutete Eisstruktur: alternierende Versätze und kleine Hohlräume
+        x += (r%2)*spacingX*0.42;
+        y += Math.sin(c*Math.PI/2)*spacingY*0.09;
+        if ((r+c)%4===0) { x += spacingX*.12; y -= spacingY*.10; }
+      } else {
+        x += (r%2)*spacingX*0.08;
+      }
+      arr.push({x,y});
+    }
+    return arr;
+  }
+
+  function liquidTargets(){
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    const isWater = substanceEl.value === 'water';
+    const cols = 7, rows = Math.ceil(N/cols);
+    // Flüssigkeit: ähnlich großes, aber leicht verändertes Volumen gegenüber dem Feststoff.
+    // Wasser ist die Ausnahme: flüssiges Wasser wird dichter gepackt als Eis.
+    const spacing = Math.min(W,H) * (isWater ? 0.072 : 0.078);
+    const densityY = isWater ? 0.86 : 0.90;
+    const startX = W/2 - spacing*(cols-1)/2;
+    const startY = H/2 - spacing*(rows-1)*densityY/2 + H*.05;
+    const arr=[];
+    for(let i=0;i<N;i++){
+      const r=Math.floor(i/cols), c=i%cols;
+      arr.push({x:startX+c*spacing + rand(-spacing*.22,spacing*.22), y:startY+r*spacing*densityY + rand(-spacing*.22,spacing*.22)});
+    }
+    return arr;
+  }
+
+  function gasBounds(K, pi, radius=0){
+    const W = canvas.clientWidth, H = canvas.clientHeight;
+    // Didaktische Volumenausdehnung: Direkt oberhalb des Siedepunkts benötigt das Gas
+    // noch einen kleineren Modellraum; bei höherer Temperatur wird der benötigte Raum größer.
+    const heat = smoothstep(pi.boil, 2000, K);
+    const scale = lerp(0.64, 0.98, Math.sqrt(heat));
+    const bw = W * scale, bh = H * scale;
+    return {left:(W-bw)/2+radius, right:(W+bw)/2-radius, top:(H-bh)/2+radius, bottom:(H+bh)/2-radius, scale};
+  }
+
+  function resetParticles(mode='auto'){
+    const K = Number(tempEl.value), mass = currentMass(), s = currentSubstance();
+    const pi = phaseInfo(K,s,mass);
+    const isIce = s.water && (pi.phase === 'zero' || pi.phase === 'solid');
+    const lattice = latticePositions(isIce ? 'ice':'solid');
+    const liq = liquidTargets();
+    particles = [];
+    for(let i=0;i<N;i++){
+      const gb = gasBounds(K, pi, 40);
+      const p0 = pi.phase === 'gas' ? {x:rand(gb.left,gb.right), y:rand(gb.top,gb.bottom)} : ((pi.phase==='liquid'||pi.phase==='boiling') ? liq[i] : lattice[i]);
+      const ang=rand(0,Math.PI*2), sp=speedFactor();
+      particles.push({
+        x:p0.x, y:p0.y, vx:Math.cos(ang)*sp*20, vy:Math.sin(ang)*sp*20,
+        ax:lattice[i].x, ay:lattice[i].y, lx:liq[i].x, ly:liq[i].y,
+        phase:rand(0,Math.PI*2), freq:rand(.75,1.25), ampDir:rand(0,Math.PI*2), sf:sp,
+        trail:[], homeCluster:Math.floor(i/7), meltOrder:rand(0,1), released:false, escapeScore:rand(0,1)
+      });
+    }
+    previousPhase = pi.phase;
+  }
+
+  function thermal(K, mass, phase){
+    // E_rel proportional zu T; Geschwindigkeit aus sqrt(2E/m). Darstellung didaktisch skaliert.
+    const E = K/300; // relative thermische Energie pro Teilchen, 300 K = 1
+    const base = Math.sqrt(Math.max(0,2*E/mass));
+    let phaseMobility = 1;
+    if (phase === 'solid' || phase === 'zero') phaseMobility = 0.45;
+    else if (phase === 'liquid' || phase === 'melting') phaseMobility = 0.62;
+    else if (phase === 'boiling') phaseMobility = 1.25;
+    else phaseMobility = 3.15;
+    return {E, base, displaySpeed: base*620*phaseMobility};
+  }
+
+  function updateSolid(dt, K, mass, pi, radius){
+    const tNorm = K/2000;
+    const amp = K===0 ? 0 : (1.2 + 22*Math.pow(tNorm,.72)) * Math.sqrt(32/mass) * (1 + .12*pi.melt/300);
+    const omega = K===0 ? 0 : (1.8 + 13*Math.sqrt(K/2000)) * Math.sqrt(32/mass);
+    for(const p of particles){
+      p.trail.push({x:p.x,y:p.y}); if(p.trail.length>10) p.trail.shift();
+      if(K===0){ p.x=p.ax; p.y=p.ay; p.vx=p.vy=0; p.trail.length=0; continue; }
+      const a = p.ampDir;
+      const wob = Math.sin(simTime*omega*p.freq + p.phase);
+      const wob2 = Math.cos(simTime*omega*(p.freq*.81) + p.phase*.7);
+      const nx = Math.cos(a)*wob + Math.cos(a+Math.PI/2)*0.35*wob2;
+      const ny = Math.sin(a)*wob + Math.sin(a+Math.PI/2)*0.35*wob2;
+      const nxPrev = Math.cos(a)*Math.sin((simTime-dt)*omega*p.freq+p.phase);
+      p.x = p.ax + nx*amp;
+      p.y = p.ay + ny*amp;
+      p.vx = (nx-nxPrev)*amp/Math.max(dt,1e-4);
+      p.vy = omega*amp*p.freq*Math.cos(simTime*omega*p.freq+p.phase);
+    }
+  }
+
+  function updateMelting(dt, K, mass, pi, radius){
+    // Im Schmelzbereich verlassen zuerst einzelne Teilchen ihre Gitterplätze.
+    // Der Anteil gelöster Teilchen wächst mit der Temperatur im Übergangsbereich.
+    const W=canvas.clientWidth,H=canvas.clientHeight;
+    const th = thermal(K,mass,'melting');
+    const targetSpeed = th.displaySpeed * 0.32;
+    const centerX=W/2, centerY=H/2 + H*.05;
+    const rx=W*(substanceEl.value==='water'?0.225:0.245), ry=H*.205;
+    const desiredDist = radius*2.10;
+    const tNorm = K/2000;
+    const amp = (1.6 + 18*Math.pow(tNorm,.72)) * Math.sqrt(32/mass);
+    const omega = (2.0 + 12*Math.sqrt(K/2000)) * Math.sqrt(32/mass);
+    scatterSeed += dt*.20;
+
+    for(let i=0;i<N;i++){
+      const p=particles[i];
+      const mobile = p.meltOrder < pi.liquidAmt;
+      p.released = mobile;
+      if(!mobile){
+        // Noch gebundene Teilchen: Schwingung am Gitterplatz, aber etwas stärker gestört.
+        p.trail.push({x:p.x,y:p.y}); if(p.trail.length>9) p.trail.shift();
+        const a = p.ampDir;
+        const wob = Math.sin(simTime*omega*p.freq + p.phase);
+        const wob2 = Math.cos(simTime*omega*(p.freq*.77) + p.phase*.7);
+        p.x = p.ax + (Math.cos(a)*wob + Math.cos(a+Math.PI/2)*0.45*wob2)*amp;
+        p.y = p.ay + (Math.sin(a)*wob + Math.sin(a+Math.PI/2)*0.45*wob2)*amp;
+        p.vx = omega*amp*p.freq*Math.cos(simTime*omega*p.freq+p.phase)*Math.cos(a);
+        p.vy = omega*amp*p.freq*Math.cos(simTime*omega*p.freq+p.phase)*Math.sin(a);
+        continue;
+      }
+
+      let fx=(p.lx-p.x)*0.55 + (centerX-p.x)*0.12;
+      let fy=(p.ly-p.y)*0.55 + (centerY-p.y)*0.12;
+      const dxC=p.x-centerX, dyC=p.y-centerY;
+      const ell=(dxC*dxC)/(rx*rx)+(dyC*dyC)/(ry*ry);
+      if(ell>0.95){ fx-=dxC*(ell-0.95)*4.2; fy-=dyC*(ell-0.95)*4.2; }
+      const swirl = Math.sin(simTime*0.9 + p.homeCluster*1.7) * targetSpeed * 0.45;
+      fx += (-dyC/Math.max(ry,1))*swirl;
+      fy += ( dxC/Math.max(rx,1))*swirl;
+
+      for(let j=0;j<N;j++) if(j!==i){
+        const q=particles[j], dx=q.x-p.x, dy=q.y-p.y, d2=dx*dx+dy*dy;
+        if(d2<1200){
+          const d=Math.sqrt(d2)+.01, ux=dx/d, uy=dy/d;
+          let f=0;
+          if(d<desiredDist) f=-(desiredDist-d)*1.35;
+          else if(d<desiredDist*2.1) f=(d-desiredDist)*0.018*pi.attraction;
+          fx += ux*f; fy += uy*f;
+        }
+      }
+      const noiseAng = ((Math.sin(scatterSeed + i*10.431)*24634.6345)%1) * Math.PI*2;
+      fx += Math.cos(noiseAng)*targetSpeed*.18;
+      fy += Math.sin(noiseAng)*targetSpeed*.18;
+      p.vx += fx*dt; p.vy += fy*dt;
+      p.vx *= Math.pow(0.968, dt*60); p.vy *= Math.pow(0.968, dt*60);
+      const sp=Math.hypot(p.vx,p.vy), want=targetSpeed*p.sf;
+      if(sp>0){ p.vx=lerp(p.vx,p.vx/sp*want,.026); p.vy=lerp(p.vy,p.vy/sp*want,.026); }
+      p.trail.push({x:p.x,y:p.y});
+      const meltTrailMax = Math.round(6 + Math.sqrt(K/2000)*18);
+      while(p.trail.length>meltTrailMax) p.trail.shift();
+      p.x += p.vx*dt; p.y += p.vy*dt;
+    }
+  }
+
+  function updateFluid(dt, K, mass, pi, radius){
+    const W=canvas.clientWidth,H=canvas.clientHeight;
+    const th = thermal(K,mass,'liquid');
+    // Flüssigkeit bewusst deutlich langsamer als Gas: kurze Spuren, dichter Verband.
+    const targetSpeed = th.displaySpeed * 0.46;
+    const centerX=W/2, centerY=H/2 + H*.05;
+    const desiredDist = radius*2.18;
+    const rx=W*(substanceEl.value==='water'?0.245:0.265), ry=H*.225;
+    // langsam wechselnde Strömungswirbel: Teilchen verschieben sich aneinander vorbei.
+    scatterSeed += dt*.22;
+    for(let i=0;i<N;i++){
+      const p=particles[i];
+      const dxC=p.x-centerX, dyC=p.y-centerY;
+      const ell=(dxC*dxC)/(rx*rx)+(dyC*dyC)/(ry*ry);
+      let fx=(centerX-p.x)*0.34, fy=(centerY-p.y)*0.34;
+      if(ell>0.82){ fx-=dxC*Math.max(0,ell-0.82)*7.0; fy-=dyC*Math.max(0,ell-0.82)*7.0; }
+      // Scherströmung/Tangentialbewegung: Gleitbewegung statt freier Gasflug.
+      const swirl = Math.sin(simTime*0.9 + p.homeCluster*1.7) * targetSpeed * 0.55;
+      fx += (-dyC/Math.max(ry,1))*swirl;
+      fy += ( dxC/Math.max(rx,1))*swirl;
+      // lokale Anziehung/Abstoßung hält die dichte Packung zusammen; Nachbarschaften wechseln.
+      for(let j=i+1;j<N;j++){
+        const q=particles[j], dx=q.x-p.x, dy=q.y-p.y, d2=dx*dx+dy*dy;
+        if(d2<1800){
+          const d=Math.sqrt(d2)+.01, ux=dx/d, uy=dy/d;
+          let f=0;
+          if(d<desiredDist) f=-(desiredDist-d)*2.2;                  // harte Nahbereich-Abstoßung
+          else if(d<desiredDist*2.45) f=(d-desiredDist)*0.045*pi.attraction; // kurze Anziehung
+          p.vx += ux*f*dt; p.vy += uy*f*dt; q.vx -= ux*f*dt; q.vy -= uy*f*dt;
+        }
+      }
+      const noiseAng = ((Math.sin(scatterSeed + i*12.9898)*43758.5453)%1) * Math.PI*2;
+      fx += Math.cos(noiseAng)*targetSpeed*.28;
+      fy += Math.sin(noiseAng)*targetSpeed*.28;
+      p.vx += fx*dt; p.vy += fy*dt;
+      p.vx *= Math.pow(0.965, dt*60); p.vy *= Math.pow(0.965, dt*60);
+      const sp=Math.hypot(p.vx,p.vy), want=targetSpeed*p.sf;
+      if(sp>0){ const mix=.030; p.vx=lerp(p.vx,p.vx/sp*want,mix); p.vy=lerp(p.vy,p.vy/sp*want,mix); }
+      // Flüssigkeit: deutlich kürzere Bewegungsspuren als Gas.
+      p.trail.push({x:p.x,y:p.y});
+      const liquidTrailMax = Math.round(8 + Math.sqrt(K/2000)*26);
+      while(p.trail.length>liquidTrailMax) p.trail.shift();
+      p.x += p.vx*dt; p.y += p.vy*dt;
+      // Keine großen Raumflüge: Teilchen werden in den Tropfen zurückgeführt.
+      const dxN=p.x-centerX, dyN=p.y-centerY;
+      const ellN=(dxN*dxN)/(rx*rx)+(dyN*dyN)/(ry*ry);
+      if(ellN>1.05){ p.x-=dxN*(ellN-1.05)*0.08; p.y-=dyN*(ellN-1.05)*0.08; p.vx*=0.75; p.vy*=0.75; }
+    }
+  }
+
+  function updateGas(dt, K, mass, pi, radius){
+    const W=canvas.clientWidth,H=canvas.clientHeight;
+    const th = thermal(K,mass,'gas');
+    const targetSpeed = th.displaySpeed;
+    // Unsichtbares Modell-Rechteck: Es wächst mit der Temperatur. Die meisten Gasteilchen
+    // bleiben darin, wenige einzelne dürfen entkommen und bewegen sich dann im ganzen Animationsraum.
+    const b = gasBounds(K, pi, radius);
+    const escapeFraction = 0.10; // bei 49 Teilchen etwa 4–5 entkommende Gasteilchen
+    for(const p of particles){
+      const sp=Math.hypot(p.vx,p.vy) || 1;
+      const want=targetSpeed*p.sf;
+      p.vx = lerp(p.vx, p.vx/sp*want, .035);
+      p.vy = lerp(p.vy, p.vy/sp*want, .035);
+      p.trail.push({x:p.x,y:p.y});
+      const gasTrailMax = Math.round(14 + Math.sqrt(K/2000)*36);
+      while(p.trail.length>gasTrailMax) p.trail.shift();
+      p.x += p.vx*dt; p.y += p.vy*dt;
+
+      const escaped = p.escapeScore < escapeFraction;
+      const left   = escaped ? radius : b.left;
+      const right  = escaped ? W-radius : b.right;
+      const top    = escaped ? radius : b.top;
+      const bottom = escaped ? H-radius : b.bottom;
+      if(p.x<left){p.x=left;p.vx=Math.abs(p.vx); jitter(p)}
+      if(p.x>right){p.x=right;p.vx=-Math.abs(p.vx); jitter(p)}
+      if(p.y<top){p.y=top;p.vy=Math.abs(p.vy); jitter(p)}
+      if(p.y>bottom){p.y=bottom;p.vy=-Math.abs(p.vy); jitter(p)}
+    }
+    // vereinfachte elastische Stöße: Gas zeigt häufige Richtungswechsel, aber keine dauerhaften Bindungen.
+    for(let i=0;i<N;i++) for(let j=i+1;j<N;j++){
+      const a=particles[i], b2=particles[j], dx=b2.x-a.x, dy=b2.y-a.y, minD=radius*2.15, d2=dx*dx+dy*dy;
+      if(d2>0 && d2<minD*minD){
+        const d=Math.sqrt(d2), nx=dx/d, ny=dy/d;
+        const p=2*(a.vx*nx+a.vy*ny-b2.vx*nx-b2.vy*ny)/2;
+        a.vx-=p*nx; a.vy-=p*ny; b2.vx+=p*nx; b2.vy+=p*ny;
+        const overlap=(minD-d)/2; a.x-=nx*overlap; a.y-=ny*overlap; b2.x+=nx*overlap; b2.y+=ny*overlap;
+      }
+    }
+  }
+  function jitter(p){
+    const a=rand(-.22,.22), c=Math.cos(a), s=Math.sin(a), vx=p.vx, vy=p.vy;
+    p.vx=vx*c-vy*s; p.vy=vx*s+vy*c;
+  }
+
+  function drawBackground(pi, K){
+    const W=canvas.clientWidth,H=canvas.clientHeight;
+    ctx.clearRect(0,0,W,H);
+    const grad=ctx.createLinearGradient(0,0,0,H);
+    if(pi.phase==='gas'){
+      ctx.save();
+      ctx.fillStyle='rgba(255,208,160,.75)'; ctx.font='700 12px system-ui';
+      ctx.fillText('Gas: einzelne Teilchen; wenige entkommen dem unsichtbaren, temperaturabhängigen Raum', 18, 54);
+      ctx.restore();
+    } else if(pi.phase==='liquid'||pi.phase==='boiling'){
+      ctx.save();
+      ctx.fillStyle='rgba(190,225,255,.75)'; ctx.font='700 12px system-ui';
+      ctx.fillText('Flüssigkeit: Teilchen gleiten mit kurzen blauen Spuren aneinander vorbei', 18, 54);
+      ctx.restore();
+    } else if(pi.phase==='solid'||pi.phase==='zero'||pi.phase==='melting'){
+      ctx.save();
+      const isIce = substanceEl.value==='water' && (pi.phase==='solid'||pi.phase==='zero');
+      ctx.strokeStyle=isIce?'rgba(125,211,252,.30)':'rgba(125,211,252,.22)'; ctx.lineWidth=2; ctx.setLineDash([6,6]);
+      const w=W*(isIce?0.34:0.29), h=H*(isIce?0.38:0.32);
+      ctx.strokeRect(W/2-w/2, H/2-h/2+H*.03, w, h);
+      ctx.setLineDash([]); ctx.fillStyle='rgba(190,238,255,.62)'; ctx.font='700 12px system-ui';
+      ctx.fillText(pi.phase==='melting'?'Schmelzen: Teilchen lösen sich aus dem Gitter':(isIce?'Eis: offenes Gitter, größeres Volumen':'Feststoff: enges geordnetes Gitter'), W/2-w/2+8, H/2-h/2+H*.03-8);
+      ctx.restore();
+    }
+    ctx.fillStyle='rgba(255,255,255,.06)'; ctx.font='700 13px system-ui';
+    ctx.fillText('Geschwindigkeitsspuren zeigen Betrag und Richtung der Bewegung', 18, H-18);
+  }
+
+  function drawBonds(pi){
+    if(pi.phase==='gas') return;
+    ctx.save();
+    const solidAlpha = pi.phase==='solid'||pi.phase==='zero' ? .33 : .08*pi.solidAmt;
+    if(solidAlpha>0.01){
+      ctx.strokeStyle=`rgba(125,211,252,${solidAlpha})`; ctx.lineWidth=1.2;
+      const cols=7;
+      for(let i=0;i<N;i++){
+        const p=particles[i];
+        if(i%cols!==cols-1 && i+1<N) line(p,particles[i+1]);
+        if(i+cols<N) line(p,particles[i+cols]);
+      }
+    }
+    if(pi.phase==='liquid'||pi.phase==='melting'||pi.phase==='boiling'){
+      ctx.strokeStyle='rgba(96,165,250,.26)'; ctx.lineWidth=1.6;
+      for(let i=0;i<N;i++) for(let j=i+1;j<N;j++){
+        const a=particles[i],b=particles[j],d=Math.hypot(a.x-b.x,a.y-b.y);
+        if(d<32){ctx.globalAlpha=clamp(1-d/32,0,1); line(a,b);}
+      }
+      ctx.globalAlpha=1;
+    }
+    ctx.restore();
+    function line(a,b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+  }
+
+  function drawParticles(K, mass, pi, radius){
+    const s=currentSubstance();
+    const tHot = clamp(K/2000, 0, 1);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for(const p of particles){
+      // Bewegungsspur: Länge und Deutlichkeit wachsen mit Geschwindigkeit und Temperatur.
+      // Flüssigkeit: blaue, kurze Spuren. Gas: orange, immer längere Spuren.
+      const sp=Math.hypot(p.vx,p.vy);
+      const maxTrail = Math.max(1,p.trail.length-1);
+      for(let i=1;i<p.trail.length;i++){
+        const a=p.trail[i-1], b=p.trail[i];
+        const age = i/maxTrail;
+        let alpha, width, color;
+        if(pi.phase==='gas'){
+          alpha = age * clamp(sp/215, .18, .88) * (K===0?0:1);
+          width = 1.2 + clamp(sp/145,0,3.5);
+          color = `rgba(249,115,22,${alpha})`;
+        } else if(pi.phase==='liquid'||pi.phase==='boiling'||pi.phase==='melting'){
+          alpha = Math.pow(age, 1.15) * clamp(sp/85, .38, .96) * (0.68 + 0.32*tHot) * (K===0?0:1);
+          width = 1.8 + clamp(sp/90,0,3.6);
+          color = `rgba(75,170,255,${alpha})`;
+        } else {
+          alpha = age * clamp(sp/260, .07, .55) * (K===0?0:1);
+          width = 1 + clamp(sp/190,0,2.2);
+          color = `rgba(125,211,252,${alpha*.7})`;
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      }
+
+      // Zusätzlicher kurzer aktueller Geschwindigkeitsstreifen direkt hinter jedem Teilchen.
+      // Dadurch ist besonders im flüssigen Zustand sofort erkennbar: wärmer = schneller = längere/deutlichere blaue Spur.
+      if(K>0 && (pi.phase==='liquid'||pi.phase==='boiling'||pi.phase==='melting'||pi.phase==='gas') && sp>1){
+        const ux=p.vx/sp, uy=p.vy/sp;
+        let streakLen, streakAlpha, streakWidth, streakColor;
+        if(pi.phase==='gas'){
+          streakLen = clamp(sp*(0.055 + 0.040*tHot), 14, 78);
+          streakAlpha = clamp(0.30 + sp/430 + 0.22*tHot, 0.32, 0.82);
+          streakWidth = 1.6 + clamp(sp/160,0,3.8);
+          streakColor = `rgba(255,139,45,${streakAlpha})`;
+        } else {
+          streakLen = clamp(sp*(0.060 + 0.040*tHot), 10, 58);
+          streakAlpha = clamp(0.44 + sp/220 + 0.36*tHot, 0.48, 0.94);
+          streakWidth = 2.2 + clamp(sp/115,0,4.0);
+          streakColor = `rgba(65,170,255,${streakAlpha})`;
+        }
+        const x2=p.x-ux*streakLen, y2=p.y-uy*streakLen;
+        const grad=ctx.createLinearGradient(x2,y2,p.x,p.y);
+        if(pi.phase==='gas'){
+          grad.addColorStop(0,'rgba(255,139,45,0)');
+          grad.addColorStop(1,streakColor);
+        } else {
+          grad.addColorStop(0,'rgba(65,170,255,0)');
+          grad.addColorStop(1,streakColor);
+        }
+        ctx.strokeStyle=grad;
+        ctx.lineWidth=streakWidth;
+        ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(p.x,p.y); ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    for(const p of particles){
+      const g=ctx.createRadialGradient(p.x-radius*.35,p.y-radius*.4,1,p.x,p.y,radius*1.25);
+      const base=s.color || '#6bdcff';
+      if(pi.phase==='gas'){g.addColorStop(0,'#fff1d6');g.addColorStop(.42,base);g.addColorStop(1,'rgba(249,115,22,.20)');}
+      else if(pi.phase==='liquid'||pi.phase==='boiling'||pi.phase==='melting'){g.addColorStop(0,'#eef7ff');g.addColorStop(.48,base);g.addColorStop(1,'rgba(59,130,246,.22)');}
+      else {g.addColorStop(0,'#f4fdff');g.addColorStop(.50,base);g.addColorStop(1,'rgba(125,211,252,.20)');}
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,radius,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=1; ctx.stroke();
+    }
+  }
+
+  function updateStats(K, mass, pi){
+    const deg=celsius(K);
+    const tempText = `Temperatur: ${fmt(K,0)} K (${fmt(deg,2)} °C)`;
+    ids.tempVal.textContent=tempText; ids.statTemp.textContent=`${fmt(K,0)} K (${fmt(deg,2)} °C)`;
+    ids.massVal.textContent=`${fmt(mass, mass<10?2:1)} u`;
+    const stateClass = pi.phase==='zero'?'stateZero':pi.phase==='gas'?'stateGas':(pi.phase==='liquid'||pi.phase==='boiling')?'stateLiquid':'stateSolid';
+    ids.statState.innerHTML=`<span class="${stateClass}">${pi.phaseLabel}</span>`;
+    ids.phasePill.textContent=pi.phaseLabel;
+    ids.transitionPill.textContent=`Schmelzen: ${fmt(pi.melt,1)} K · Sieden: ${fmt(pi.boil,1)} K`;
+    ids.statPoints.textContent=`${fmt(pi.melt,1)} K / ${fmt(pi.boil,1)} K`;
+    const speeds=particles.map(p=>Math.hypot(p.vx,p.vy));
+    const avg=speeds.reduce((a,b)=>a+b,0)/Math.max(1,speeds.length);
+    ids.statSpeed.textContent = K===0 ? '0,0 rel. Einh./s' : `${fmt(avg,1)} rel. Einh./s`;
+    ids.statEnergy.textContent = `${fmt(K/300,2)} × E(300 K)`;
+    ids.waterHint.classList.toggle('show', substanceEl.value==='water');
+    const s=currentSubstance();
+    if(s.mass){ ids.substanceVal.textContent=`${s.name}: ${fmt(s.mass, s.mass<10?2:1)} u`; }
+    else ids.substanceVal.textContent='Masse einstellbar';
+    drawHistogram(speeds, K, pi);
+  }
+
+  function drawHistogram(speeds, K, pi){
+    const W=hist.width, H=hist.height;
+    hctx.clearRect(0,0,W,H);
+    hctx.fillStyle='#08101f'; hctx.fillRect(0,0,W,H);
+    hctx.strokeStyle='rgba(255,255,255,.12)'; hctx.strokeRect(.5,.5,W-1,H-1);
+    hctx.fillStyle='rgba(255,255,255,.82)'; hctx.font='700 13px system-ui'; hctx.fillText('Geschwindigkeitsverteilung',12,20);
+    if(K===0){ hctx.fillStyle='rgba(216,243,255,.9)'; hctx.fillText('Alle Teilchen: v = 0', 12, 50); return; }
+    const bins=18; const maxV=Math.max(1, ...speeds)*1.05;
+    const counts=new Array(bins).fill(0);
+    for(const v of speeds){ counts[Math.min(bins-1, Math.floor(v/maxV*bins))]++; }
+    const maxC=Math.max(1,...counts), padL=28, padB=28, top=34;
+    const plotW=W-padL-12, plotH=H-top-padB;
+    hctx.strokeStyle='rgba(255,255,255,.18)'; hctx.beginPath(); hctx.moveTo(padL,top); hctx.lineTo(padL,H-padB); hctx.lineTo(W-10,H-padB); hctx.stroke();
+    const color = pi.phase==='gas'?'rgba(249,115,22,.86)':(pi.phase==='liquid'||pi.phase==='boiling')?'rgba(96,165,250,.86)':'rgba(125,211,252,.86)';
+    for(let i=0;i<bins;i++){
+      const bh=counts[i]/maxC*plotH;
+      const x=padL+i*plotW/bins+1, bw=plotW/bins-2;
+      const y=H-padB-bh;
+      hctx.fillStyle=color; hctx.fillRect(x,y,bw,bh);
+    }
+    hctx.fillStyle='rgba(255,255,255,.68)'; hctx.font='11px system-ui';
+    hctx.fillText('0', padL-3, H-9); hctx.fillText(fmt(maxV,0), W-44, H-9); hctx.fillText('v', W-16, H-9);
+  }
+
+  function animate(now){
+    const rawDt = Math.min(0.033, (now-lastT)/1000 || 0.016); lastT=now; simTime+=rawDt;
+    const K=Number(tempEl.value), mass=currentMass(), s=currentSubstance();
+    const pi=phaseInfo(K,s,mass);
+    const radius = clamp(3.8 + Math.sqrt(mass)*0.78, 5, 16);
+    if(pi.phase!==previousPhase || particles.length!==N) {
+      // Bei Übergang Gas/Flüssigkeit/Feststoff neue Startverteilung, damit Auflösung/Entstehen erkennbar wird.
+      const keep = previousPhase!=='init' && !(pi.phase==='zero');
+      if(!keep) resetParticles(); else previousPhase=pi.phase;
+    }
+    drawBackground(pi,K);
+    if(K===0 || pi.phase==='solid') updateSolid(rawDt,K,mass,pi,radius);
+    else if(pi.phase==='melting') updateMelting(rawDt,K,mass,pi,radius);
+    else if(pi.phase==='liquid' || pi.phase==='boiling') updateFluid(rawDt,K,mass,pi,radius);
+    else updateGas(rawDt,K,mass,pi,radius);
+    drawBonds(pi);
+    drawParticles(K,mass,pi,radius);
+    updateStats(K,mass,pi);
+    requestAnimationFrame(animate);
+  }
+
+  function applySubstanceChange(){
+    const s=currentSubstance();
+    if(s.mass){ massEl.value = String(Math.round(s.mass)); massEl.disabled = true; }
+    else { massEl.disabled = false; }
+    resetParticles();
+  }
+
+  function applyMassChange(){ resetParticles(); }
+  function applyTempChange(){
+    const K=Number(tempEl.value), pi=phaseInfo(K,currentSubstance(),currentMass());
+    // exakter Nullpunkt: sofort ideale Ordnung ohne Restspuren
+    if(K===0 || pi.phase!==previousPhase) resetParticles();
+  }
+
+  window.addEventListener('resize', ()=>{ resizeCanvas(); resetParticles(); });
+  tempEl.addEventListener('input', applyTempChange);
+  massEl.addEventListener('input', applyMassChange);
+  substanceEl.addEventListener('change', applySubstanceChange);
+
+  resizeCanvas();
+  resetParticles();
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>
